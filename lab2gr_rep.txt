@@ -1,0 +1,764 @@
+Министерство образования и науки Российской Федерации
+федеральное государственное автономное образовательное
+учреждение высшего образования
+Санкт-Петербургский исследовательский университет
+Информационных технологий, механики и оптики
+Мегафакультет трансляционных информационных технологий
+Факультет информационных технологий и программирования
+Лабораторная работа № 2
+По дисциплине «Компьютерная графика и геометрия»
+Изучение алгоритмов отрисовки растровых линий с применением сглаживания и гамма-коррекции
+Выполнил студент группы M3102
+Гусев Дмитрий Алексеевич
+Проверил:
+Скаков Павел Сергеевич
+САНКТ-ПЕТЕРБУРГ
+2020
+цель работы
+Изучить алгоритмы и реализовать программу, рисующую линию на изображении в формате PGM(P5) с учетом гамма-коррекции sRGB
+Описание работы
+Описание:
+Программа должна быть написана на C/C++ и не использовать внешние библиотеки.
+
+Аргументы передаются через командную строку:
+program.exe <имя_входного_файла> <имя_выходного_файла> <яркость_линии> <толщина_линии> <x_начальный> <y_начальный> <x_конечный> <y_конечный> <гамма>
+где
+⦁	<яркость_линии>: целое число 0..255;
+⦁	<толщина_линии>: положительное дробное число;
+⦁	<x,y>: координаты внутри изображения, (0;0) соответствует левому верхнему углу, дробные числа (целые значения соответствуют центру пикселей).
+⦁	<гамма>: (optional)положительное вещественное число: гамма-коррекция с введенным значением в качестве гаммы. При его отсутствии используется sRGB.
+
+Теоретическая часть
+Для отрисовки линии был выбран алгоритм Ву-Сяолиня. По алгоритму необходимо считать расстояние от данного пикселя до идеальной прямой, соединяющей две точки, для этого использована формула расстояния от точки до прямой(рис.1).
+   Рис.2
+
+Рис. 1
+ 
+Так как используется расстояние от точки до прямой, то несмотря на то, что полностью рассматривается большой прямоугольник с рис.2, все равно отсекаются пиксели, которые лежат левее и выше (оси развернуты) чем AB и правее и ниже, чем CD. Значения точек A, B, C, D явно высчитываются для дальнейшего использования.
+Согласно алгоритму Ву берется расстояние от рассматриваемого пикселя и сравнивается с шириной линии (половина вводимого значения – 1(т.к. самая яркая часть меньше на 1 за счет сглаживания прямой), далее именно это будет называться шириной линии, а не вводимое значение). Если расстояние меньше, чем ширина линии, то пиксель рисуется максимальной яркости, если расстояние больше, чем ширина линии + 1, то пиксель не меняется, если же расстояние находится в диапазоне между ранее перечисленными случаями, то яркость преобразуется по формуле (dist + 1.0 – thick) * bright, согласно алгоритму Ву. Границы линии обрисовываются также согласно алгоритму Ву, как прямые между вершинами A, B и C, D соответственно.
+Отрисовка наклонных прямых разбита на два случая, когда y при увеличении x убывает и когда y аналогично увеличивается.
+Вертикальная и горизонтальная прямая (в силу того, что в формуле Ax+By+C=0 будут нули в A или же B) обрабатываются отдельно от основного алгоритма, так как вычислить точно значение координат A, B, C, D при помощи перпендикуляров к прямой невозможно.
+Гамма коррекция и альфа смешивание
+Формулы гамма и sRGB коррекции для приведения фактического значения в линейное:
+Для гамма-коррекции с указанной гаммой:
+Color = color^gamma (где color – значение пикселя, деленное на 255)
+Для sRGB коррекции:
+ (где u – значение пикселя, поделенное на 255)
+Формулы гамма и sRGB коррекции для приведения линейного значения в фактическое:
+Для гамма-коррекции с указанной гаммой:
+Color = color ^ (1 / gamma) (где color – значение пикселя, деленное на 255)
+Для sRGB коррекции:
+ 
+Изначально вводимое значение яркости прямой является уже гамма скорректированным => используется алгоритм приведения значения пикселя к линейному (при помощи гамма-коррекции, если указано значение гаммы или при помощи обратной sRGB коррекции, если гамма равна 0 или же не указана). Также самая картинка также является гамма скорректированной => используется алгоритм приведения значения пикселя фона к линейному. После для каждого пикселя используется альфа смешивание по формуле: R = B * (1 – A) + F * A, где B линейная яркость фонового пикселя, F линейная яркость накладываемого пикселя, A непрозрачность накладываемого пикселя(значение от 0 до 1) и R – линейное значение полученной новой яркости пикселя. Очевидно, что для пикселей, находящихся внутри прямой непрозрачность это 1 и из формулы будет следовать R = F * A, соответственно, из внутренних пикселей линии альфа-смешивание не запускается.
+Экспериментальная часть
+Лабораторная работа выполнена на языке C++17.
+Реализация
+Для гамма-коррекции из фактического значения пикселя в линейное были использованы функции gamma_correction_to_linear и sRGB_correction
+double gamma_correction_to_linear(double pi, double gamma)
+{
+	return round(255.0 * pow(pi / 255.0, gamma));
+}
+double sRGB_correction(double pi)
+{
+	if (pi / 255.0 <= 0.04045)
+		return min((round(pi / 255.0 / 12.92) * 255.0), 255.0);
+	else
+		return min(round(pow(((200.0 * pi / 255.0 + 11) / 211.0), 12.0 / 5.0) * 255.0), 255.0);
+}
+Для обратного перевода используются функции gamma_correction_fr_linear и from_sRGB_to_RGB
+double gamma_correction_fr_linear(double pi, double gamma)
+{
+	return round(255.0 * pow(pi / 255.0, 1.0 / gamma));
+}
+double from_sRGB_to_RGB(double pi)
+{
+	if (pi / 255.0 <= 0.0031308)
+		return min(round((12.92 * pi / 255.0) * 255.0), 255.0);
+	else
+		return min(round((1.055 * pow(pi / 255.0, (1.0 / 2.4)) - 0.055) * 255.0), 255.0);
+}
+Для альфа-смешивания используется функция alpha_blending(на вход подаются уже линейные значения фонового пикселя и цвета, на который меняется пиксель)
+double alpha_blending(double old_p, double new_color, double new_bright)
+{
+	return old_p * (1.0 - new_bright) + new_bright * new_color;
+}
+Проверка на то, является ли прямая горизонтальной или вертикальной осуществляется путем сравнения x и y координат начальной и конечной точки.
+	if (X_start == X_finish)
+	{
+		if (Y_start > Y_finish)
+			swap(Y_start, Y_finish);
+		draw_vertical_line(pi, x, y, X_start, Y_start, X_finish, Y_finish, thickness, brightness, check, gamma);
+	}
+	else
+	{
+		if (Y_start == Y_finish)
+		{
+			if (X_start > X_finish)
+				swap(X_start, X_finish);
+			draw_horisontal_line(pi, x, y, X_start, Y_start, X_finish, Y_finish, thickness, brightness, check, gamma);
+		}
+	}
+Каждая наклонная линия разворачивается так, чтобы x координата ее начальной точки была меньше x координаты конечной. Осуществляется это путем сравнения начальной и конечной координаты по оси x и swap’e конечной и начальной точки, если конечная x-координата меньше.
+	if (X_start > X_finish)
+		{
+			swap(X_start, X_finish);
+			swap(Y_start, Y_finish);
+		}
+Далее выполняется преобразование ширины прямой и проверка того, является ли эта ширина больше 1 или <=1. Для случая, если ширина меньше 1 происходит изменение яркости на более тусклую в соответствии с формулой brightness = (thickness + 1) * brightness; Если ширина больше 1, то выбирается функция, которая включает в себя сглаживание концов прямой. В обратном же случае запускается функция без сглаживания коцов.
+{	if ((X_start != X_finish) && (Y_start != Y_finish))
+	{
+		thickness = thickness - 1.0;
+		if (thickness < 0)
+			brightness = (thickness + 1) * brightness;
+		if (X_start > X_finish)
+		{
+			swap(X_start, X_finish);
+			swap(Y_start, Y_finish);
+		}
+		if (Y_start > Y_finish)
+		{
+			if (thickness > 0)
+				less_than_45(pi, x, y, X_start, Y_start, X_finish, Y_finish, thickness, brightness, check, gamma);
+			else
+				less_than_45_cop(pi, x, y, X_start, Y_start, X_finish, Y_finish, thickness, brightness, check, gamma);
+		}
+		else
+		{
+			if (thickness > 0)
+				more_than_45(pi, x, y, X_start, Y_start, X_finish, Y_finish, thickness, brightness, check, gamma);
+			else
+				more_than_45_cop(pi, x, y, X_start, Y_start, X_finish, Y_finish, thickness, brightness, check, gamma);
+		}
+	}
+Для отрисовки вертикальной и горизонтальной прямой были использованы функции draw_vertical_line и draw_horisontal_line. Для случаев, когда ширина больше 1 и нужно сглаживание краев используются функции draw_horisontal_line_cop draw_vertical_line_cop.
+Внутри отрисовки наклонной линии сначала запускается Ву 0 ширины для отрисовки сглаживания между вершинами AB и CD. Далее уже запускается проход по всем пикселям картинки, где проверяется вхождение в большой квадрат и корректность положения пикселя относительно прямых(не отрезков) AB и CD. Сами прямые AB и CD не подходят условию, так как ранее были прорисованы, соответственно знаки являются строгими. 
+if ((i % x >= floor(A_x)) && (i % x <= ceil(D_x)) && (i / x >= floor(C_y)) && (i % x > floor(((floor(i / x) * 1.0) - b_perp_start) * 1.0 / k_perp * 1.0)) &&  (i % x < ceil(( (i / x) * 1.0 - b_perp_finish) * 1.0 / k_perp * 1.0)))
+Вывод
+В ходе проделанной работы были реализованы алгоритмы, рисующие линии заданной ширины на изображении в формате P5 с учетом гамма коррекции и sRGB коррекции. В программе не используется доп.память.
+Исходный код: 
+ #include <iostream>
+#include <cmath>
+#include <cstring>
+#include<stdio.h>
+#include <algorithm>
+// #include "h2lab.h"
+
+using namespace std;
+
+
+
+double gamma_correction_fr_linear(double pi, double gamma)
+{
+	return round(255.0 * pow(pi / 255.0, 1.0 / gamma));
+}
+
+double alpha_blending(double old_p, double new_color, double new_bright)
+{
+//	cout << "new_p=" << new_bright << " " << new_color << " ans=";
+//	cout << (old_p * (1.0 - new_bright) + new_bright * new_color) << endl;
+	return old_p * (1.0 - new_bright) + new_bright * new_color;
+}
+
+double gamma_correction_to_linear(double pi, double gamma)
+{
+	return round(255.0 * pow(pi / 255.0, gamma));
+}
+
+
+
+double from_sRGB_to_RGB(double pi)
+{
+	if (pi / 255.0 <= 0.0031308)
+		return min(round((12.92 * pi / 255.0) * 255.0), 255.0);
+	else
+		return min(round((1.055 * pow(pi / 255.0, (1.0 / 2.4)) - 0.055) * 255.0), 255.0);
+}
+
+double sRGB_correction(double pi)
+{
+	if (pi / 255.0 <= 0.04045)
+		return min((round(pi / 255.0 / 12.92) * 255.0), 255.0);
+	else
+		return min(round(pow(((200.0 * pi / 255.0 + 11) / 211.0), 12.0 / 5.0) * 255.0), 255.0);
+}
+
+void draw_v(unsigned char* pi, int x, int y, int X_start, int Y_start, int X_finish, int Y_finish, double thickness, int brightness, int color, int check, double gamma)
+{
+	for (int i = Y_start; i < Y_finish; i++)
+	{
+		double pix, new_p;
+		if (gamma == 0)
+			pi[i * check * x + X_start * check] = sRGB_correction(pi[i * check * x + X_start * check]);
+		else
+			pix = gamma_correction_to_linear(pi[i * check * x + X_start * check], gamma);
+		pi[i * check * x + X_start * check] = brightness;
+		if (gamma == 0)
+			pi[i * check * x + X_start * check] = from_sRGB_to_RGB(pi[i * check * x + X_start * check]);
+		else
+			pi[i * check * x + X_start * check] = gamma_correction_fr_linear(pi[i * check * x + X_start * check], gamma);
+	}
+}
+
+void draw_h(unsigned char* pi, int x, int y, int X_start, int Y_start, int X_finish, int Y_finish, double thickness, int brightness, int color, int check, double gamma)
+{
+	for (int i = X_start; i < X_finish; i++)
+	{
+//		cout << brightness << " ";
+		if (gamma == 0)
+			pi[Y_start * check * x + i * check] = sRGB_correction(pi[Y_start * check * x + i * check]);
+		else
+			pi[Y_start * check * x + i * check] = gamma_correction_to_linear(pi[Y_start * check * x + i * check], gamma);
+		pi[Y_start * check * x + i * check] = brightness;
+		if (gamma == 0)
+			pi[Y_start * check * x + i * check] = from_sRGB_to_RGB(pi[Y_start * check * x + i * check]);
+		else
+			pi[Y_start * check * x + i * check] = gamma_correction_fr_linear(pi[Y_start * check * x + i * check], gamma);
+	}
+}
+
+void draw_line_ends(unsigned char* pi, int x, int y, double X_start, double Y_start, double X_finish, double Y_finish, int brightness_start, int brightness_finish, int color, int check, double gamma)
+{
+	int Y_start_int = floor(Y_start), Y_finish_int = floor(Y_finish);
+	int X_start_int = int(X_start), X_finish_int = int(X_finish);
+	pi[x * check * Y_start_int + X_start_int * check] = 255.0 * ((pi[x * check * Y_start_int + X_start_int * check] / 255.0) + (brightness_start / 255.0 - pi[x * check * Y_start_int + X_start_int * check] / 255.0) * (1 - color / 255.0));
+	pi[x * check * Y_finish_int + X_finish_int * check] = 255.0 * ((pi[x * check * Y_finish_int + X_finish_int * check] / 255.0) + (brightness_finish / 255.0 - pi[x * check * Y_finish_int + X_finish_int * check] / 255.0) * (1 - color / 255.0));
+}
+
+
+
+void draw_vertical_line_cop(unsigned char* pi, int x, int y, double X_start, double Y_start, double X_finish, double Y_finish, double thickness, int brightness, int check, double gamma)
+{
+	double dist, new_p, r_p, cop_br, pix, old_p;
+	if (gamma == 0)
+		cop_br = sRGB_correction(brightness);
+	else
+		cop_br = gamma_correction_to_linear(brightness, gamma);
+	for (int i = 0; i < x * y * check; i++)
+	{
+//		if ((i / (x * check) >= Y_start)&&(i / (x * check) <= Y_finish) && ((i % x) >= X_start - thickness * 1.0) && ((i % x) <= X_start + thickness * 1.0))
+		if ((i / (x * check) >= Y_start)&&(i / (x * check) <= Y_finish))
+		{
+			if (gamma == 0)
+				pix = sRGB_correction(pi[i]);
+			else
+				pix = gamma_correction_to_linear(pi[i], gamma);
+			dist = abs((i % x) * 1.0 + 0.5 - 1.0 * X_start);
+//			cout << dist << " " << i % x << " " << i / x << endl;
+			if (dist <= (thickness * 1.0 - 1.0) / 2.0)
+				pi[i] = brightness;
+			else
+			if (dist <= (thickness * 1.0 - 1.0) / 2.0 + 1)
+			{
+//				cout << 1.0 - dist + (thickness - 1) / 2.0;
+				new_p = (1.0 - dist + (thickness - 1) / 2.0);
+				old_p = pix;
+				r_p = new_p;
+				r_p = alpha_blending(old_p, cop_br, new_p);
+				if (gamma == 0)
+					pi[i] = from_sRGB_to_RGB(r_p);
+				else
+					pi[i] = gamma_correction_fr_linear(r_p, gamma);
+			}
+		}
+	}
+}
+
+
+void draw_horisontal_line_cop(unsigned char* pi, int x, int y, double X_start, double Y_start, double X_finish, double Y_finish, double thickness, int brightness, int check, double gamma)
+{
+	double dist, new_p, r_p, cop_br, pix, old_p;
+	if (gamma == 0)
+		cop_br = sRGB_correction(brightness);
+	else
+		cop_br = gamma_correction_to_linear(brightness, gamma);
+	for (int i = 0; i < x * y * check; i++)
+	{
+		if ((i % (x * check) >= X_start)&&(i % (x * check) <= X_finish))
+		{
+			if (gamma == 0)
+				pix = sRGB_correction(pi[i]);
+			else
+				pix = gamma_correction_to_linear(pi[i], gamma);
+			dist = abs((i / x) * 1.0 + 0.5 - Y_start);
+			if (dist <= (thickness * 1.0 - 1.0) / 2.0)
+				pi[i] = brightness;
+			else
+			if (dist <= (thickness * 1.0 - 1.0) / 2.0 + 1)
+			{
+				new_p = (1.0 - dist + (thickness - 1) / 2.0);
+				old_p = pix;
+				r_p = new_p;
+				r_p = alpha_blending(old_p, cop_br, new_p);
+				if (gamma == 0)
+					pi[i] = from_sRGB_to_RGB(r_p);
+				else
+					pi[i] = gamma_correction_fr_linear(r_p, gamma);
+			}
+		}
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+void draw_vertical_line(unsigned char* pi, int x, int y, double X_start, double Y_start, double X_finish, double Y_finish, double thickness, int brightness, int check, double gamma)
+{
+	double dist, new_p, r_p, cop_br, pix, old_p;
+	if (gamma == 0)
+		cop_br = sRGB_correction(brightness);
+	else
+		cop_br = gamma_correction_to_linear(brightness, gamma);
+	if (thickness > 1)
+	{
+		draw_horisontal_line_cop(pi, x, y, floor(X_start) - thickness / 2.0, ceil(Y_start), floor(X_finish) + thickness / 2.0, floor(Y_start), 1.0, brightness, check, gamma);
+		draw_horisontal_line_cop(pi, x, y, floor(X_start) - thickness / 2.0, ceil(Y_finish), floor(X_finish) + thickness / 2.0, floor(Y_finish), 1.0, brightness, check, gamma);
+	}
+	for (int i = 0; i < x * y * check; i++)
+	{
+//		if ((i / (x * check) >= Y_start)&&(i / (x * check) <= Y_finish) && ((i % x) >= X_start - thickness * 1.0) && ((i % x) <= X_start + thickness * 1.0))
+		if ((i / (x * check) >= Y_start)&&(i / (x * check) <= Y_finish))
+		{
+			if (gamma == 0)
+				pix = sRGB_correction(pi[i]);
+			else
+				pix = gamma_correction_to_linear(pi[i], gamma);
+			dist = abs((i % x) * 1.0 + 0.5 - 1.0 * X_start);
+//			cout << dist << " " << i % x << " " << i / x << endl;
+			if (dist <= (thickness * 1.0 - 1.0) / 2.0)
+				pi[i] = brightness;
+			else
+			if (dist <= (thickness * 1.0 - 1.0) / 2.0 + 1)
+			{
+//				cout << 1.0 - dist + (thickness - 1) / 2.0;
+				new_p = (1.0 - dist + (thickness - 1) / 2.0);
+				old_p = pix;
+				r_p = new_p;
+				r_p = alpha_blending(old_p, cop_br, new_p);
+				if (gamma == 0)
+					pi[i] = from_sRGB_to_RGB(r_p);
+				else
+					pi[i] = gamma_correction_fr_linear(r_p, gamma);
+			}
+		}
+	}
+}
+
+
+void draw_horisontal_line(unsigned char* pi, int x, int y, double X_start, double Y_start, double X_finish, double Y_finish, double thickness, int brightness, int check, double gamma)
+{
+	double dist, new_p, r_p, cop_br, pix, old_p;
+	if (gamma == 0)
+		cop_br = sRGB_correction(brightness);
+	else
+		cop_br = gamma_correction_to_linear(brightness, gamma);
+	if (thickness > 1)
+	{
+		draw_vertical_line_cop(pi, x, y, ceil(X_start), floor(Y_start - thickness / 2.0), ceil(X_start), Y_finish + thickness / 2.0, 1.0, brightness, check, gamma);
+		draw_vertical_line_cop(pi, x, y, ceil(X_finish), floor(Y_start - thickness / 2.0), ceil(X_finish), Y_finish + thickness / 2.0, 1.0, brightness, check, gamma);
+	}
+	for (int i = 0; i < x * y * check; i++)
+	{
+		if ((i % (x * check) >= X_start)&&(i % (x * check) <= X_finish))
+		{
+			if (gamma == 0)
+				pix = sRGB_correction(pi[i]);
+			else
+				pix = gamma_correction_to_linear(pi[i], gamma);
+			dist = abs((i / x) * 1.0 + 0.5 - Y_start);
+			if (dist <= (thickness * 1.0 - 1.0) / 2.0)
+				pi[i] = brightness;
+			else
+			if (dist <= (thickness * 1.0 - 1.0) / 2.0 + 1)
+			{
+				new_p = (1.0 - dist + (thickness - 1) / 2.0);
+				old_p = pix;
+				r_p = new_p;
+				r_p = alpha_blending(old_p, cop_br, new_p);
+				if (gamma == 0)
+					pi[i] = from_sRGB_to_RGB(r_p);
+				else
+					pi[i] = gamma_correction_fr_linear(r_p, gamma);
+			}
+		}
+	}
+}
+
+void less_than_45_cop(unsigned char* pi, int x, int y, double X_start, double Y_start, double X_finish, double Y_finish, double thickness, int brightness, int check, double gamma)
+{
+	double A_x, A_y, B_x, B_y, C_x, C_y, D_x, D_y;
+	double k = (Y_finish - Y_start) / (X_finish - X_start);
+	double b = Y_start - X_start * k;
+	double k_perp = -1 / k;
+	double b_perp_start = Y_start - k_perp * X_start;
+	double b_perp_finish = Y_finish - k_perp * X_finish;
+	A_x = (+(thickness / 2) * sqrt(k * k + 1) + b_perp_start - b) / (k - k_perp);
+	A_y = k_perp * A_x + b_perp_start;
+	B_x = (-(thickness / 2) * sqrt(k * k + 1) + b_perp_start - b) / (k - k_perp);
+	B_y = k_perp * B_x + b_perp_start;
+	C_x = (+(thickness / 2) * sqrt(k * k + 1) + b_perp_finish - b) / (k - k_perp);
+	C_y = k_perp * C_x + b_perp_finish;
+	D_x = (-(thickness / 2) * sqrt(k * k + 1) + b_perp_finish - b) / (k - k_perp);
+	D_y = k_perp * D_x + b_perp_finish;
+//		cout << "A_x=" << A_x << " A_y=" << A_y << " B_x=" << B_x << " B_y=" << B_y << " C_x=" << C_x << " C_y=" << C_y << " D_x=" << D_x << " D_y=" << D_y << endl;
+	double dist;
+	double new_p, old_p, r_p, cop_br;
+	if (gamma == 0)
+		cop_br = sRGB_correction(brightness);
+	else
+		cop_br = gamma_correction_to_linear(brightness, gamma);
+	for (int i = 0; i < x * y; i++)
+	{
+		dist = abs(k * ((i % x) * 1.0) + b * 1.0 - i * 1.0 / x * 1.0) / (sqrt(k * 1.0 * k + 1 * 1.0));
+		if ((i % x >= A_x) && (i % x <= D_x) && (i / x >= C_y) && (i / x <= B_y) && (i % x >= floor(((floor(i / x)) - b_perp_start) * 1.0 / k_perp * 1.0)) && (i % x <= ceil((floor(i / x) - b_perp_finish) * 1.0 / k_perp * 1.0)))
+		{
+			double pix, new_p;
+			if (gamma == 0)
+				pix = sRGB_correction(pi[i]);
+			else
+				pix = gamma_correction_to_linear(pi[i], gamma);
+			if (dist <= thickness / 2.0)
+			{
+				pi[i] = brightness;
+			}
+			else
+				if (dist <= thickness / 2.0 + 1)
+				{
+					old_p = pix;
+					new_p = (1.0 - dist + thickness / 2.0);
+					r_p = new_p;
+					r_p = alpha_blending(old_p, cop_br, new_p);
+					if (gamma == 0)
+						pi[i] = from_sRGB_to_RGB(r_p);
+					else
+						pi[i] = gamma_correction_fr_linear(r_p, gamma);
+				}
+		}
+	}
+}
+
+void more_than_45_cop(unsigned char* pi, int x, int y, double X_start, double Y_start, double X_finish, double Y_finish, double thickness, double brightness, int check, double gamma)
+{
+	double A_x, A_y, B_x, B_y, C_x, C_y, D_x, D_y;
+	double k = (Y_finish - Y_start) / (X_finish - X_start);
+	double b = Y_start - X_start * k;
+	double k_perp = -1 / k;
+	double b_perp_start = Y_start - k_perp * X_start;
+	double b_perp_finish = Y_finish - k_perp * X_finish;
+	A_x = (+(thickness / 2) * sqrt(k * k + 1) + b_perp_start - b) / (k - k_perp);
+	A_y = k_perp * A_x + b_perp_start;
+	B_x = (-(thickness / 2) * sqrt(k * k + 1) + b_perp_start - b) / (k - k_perp);
+	B_y = k_perp * B_x + b_perp_start;
+	C_x = (+(thickness / 2) * sqrt(k * k + 1) + b_perp_finish - b) / (k - k_perp);
+	C_y = k_perp * C_x + b_perp_finish;
+	D_x = (-(thickness / 2) * sqrt(k * k + 1) + b_perp_finish - b) / (k - k_perp);
+	D_y = k_perp * D_x + b_perp_finish;
+	//	cout << "A_x=" << A_x << " A_y=" << A_y << " B_x=" << B_x << " B_y=" << B_y << " C_x=" << C_x << " C_y=" << C_y << " D_x=" << D_x << " D_y=" << D_y << endl;
+	double dist;
+	double new_p, old_p, r_p, cop_br;
+	if (gamma == 0)
+		cop_br = sRGB_correction(brightness);
+	else
+		cop_br = gamma_correction_to_linear(brightness, gamma);
+	for (int i = 0; i < x * y; i++)
+	{
+		dist = abs(k * ((i % x)) + b * 1.0 - i * 1.0 / x * 1.0) / (sqrt(k * 1.0 * k + 1.0));
+		if ((i % x >= B_x) && (i % x <= C_x) && (i / x >= A_y) && (i / x <= D_y) && (i % x >= floor(((floor(i / x) + 1) - b_perp_start) * 1.0 / k_perp * 1.0 )) && (i % x <= ceil((floor(i / x) - 1 - b_perp_finish) * 1.0 / k_perp)))
+		{
+			double pix, new_p;
+			if (gamma == 0)
+				pix = sRGB_correction(pi[i]);
+			else
+				pix = gamma_correction_to_linear(pi[i], gamma);
+			if (dist <= thickness / 2.0)
+			{
+				pi[i] = brightness;
+			}
+			else
+				if (dist < thickness / 2.0 + 1)
+				{
+					old_p = pix;
+					
+//					cout << i % x << " " << i / x << " ";
+					new_p = (1.0 - dist + thickness / 2.0);
+					r_p = alpha_blending(pi[i], cop_br, new_p);
+					pi[i] = r_p;
+//					cout << r_p;
+//					cout << " x=" << i % x << " y=" << i / x << " newPixel="<< r_p << " new_p=" << new_p << " dist=" << dist << endl;
+					if (gamma == 0) 
+						pi[i] = from_sRGB_to_RGB(r_p);
+					else
+						pi[i] = gamma_correction_fr_linear(r_p, gamma);
+				}
+		}
+	}
+}
+
+
+
+
+void more_than_45(unsigned char* pi, int x, int y, double X_start, double Y_start, double X_finish, double Y_finish, double thickness, double brightness, int check, double gamma)
+{
+	double A_x, A_y, B_x, B_y, C_x, C_y, D_x, D_y;
+	double k = (Y_finish - Y_start) / (X_finish - X_start);
+	double b = Y_start - X_start * k;
+	double k_perp = -1 / k;
+	double b_perp_start = Y_start - k_perp * X_start;
+	double b_perp_finish = Y_finish - k_perp * X_finish;
+	A_x = (+(thickness / 2) * sqrt(k * k + 1) + b_perp_start - b) / (k - k_perp);
+	A_y = k_perp * A_x + b_perp_start;
+	B_x = (-(thickness / 2) * sqrt(k * k + 1) + b_perp_start - b) / (k - k_perp);
+	B_y = k_perp * B_x + b_perp_start;
+	C_x = (+(thickness / 2) * sqrt(k * k + 1) + b_perp_finish - b) / (k - k_perp);
+	C_y = k_perp * C_x + b_perp_finish;
+	D_x = (-(thickness / 2) * sqrt(k * k + 1) + b_perp_finish - b) / (k - k_perp);
+	D_y = k_perp * D_x + b_perp_finish;
+//		cout << "A_x=" << A_x << " A_y=" << A_y << " B_x=" << B_x << " B_y=" << B_y << " C_x=" << C_x << " C_y=" << C_y << " D_x=" << D_x << " D_y=" << D_y << endl;
+	double dist;
+	double new_p, old_p, r_p, cop_br;
+	if (gamma == 0)
+		cop_br = sRGB_correction(brightness);
+	else
+		cop_br = gamma_correction_to_linear(brightness, gamma);
+	if (thickness > 1)
+	{
+		less_than_45_cop(pi, x, y, B_x, B_y, A_x, A_y, 0, brightness, check, gamma);
+		less_than_45_cop(pi, x, y, D_x, D_y, C_x, C_y, 0, brightness, check, gamma);
+	}
+	for (int i = 0; i < x * y; i++)
+	{
+		dist = abs(k * ((i % x)) + b * 1.0 - i * 1.0 / x * 1.0) / (sqrt(k * 1.0 * k + 1.0));
+		if ((i % x > floor(B_x)) && (i % x < ceil(C_x)) && (i / x > floor(A_y)) && (i / x < ceil(D_y)) && (i % x > floor(((floor(i / x) + 1) - b_perp_start) * 1.0 / k_perp * 1.0 )) && (i % x < ceil((floor(i / x) - 1 - b_perp_finish) * 1.0 / k_perp)))
+		{
+			double pix, new_p; 
+			if (gamma == 0)
+				pix = sRGB_correction(pi[i]);
+			else
+				pix = gamma_correction_to_linear(pi[i], gamma);
+			if (dist <= thickness / 2.0)
+			{
+				pi[i] = brightness;
+			}
+			else
+				if (dist < thickness / 2.0 + 1)
+				{
+					old_p = pix;
+					
+//					cout << i % x << " " << i / x << " ";
+					new_p = (1.0 - dist + thickness / 2.0);
+					r_p = alpha_blending(pi[i], cop_br, new_p);
+					pi[i] = r_p;
+//					cout << r_p;
+//					cout << " x=" << i % x << " y=" << i / x << " newPixel="<< r_p << " new_p=" << new_p << " dist=" << dist << endl;
+					if (gamma == 0) 
+						pi[i] = from_sRGB_to_RGB(r_p);
+					else
+						pi[i] = gamma_correction_fr_linear(r_p, gamma);
+				}
+		}
+	}
+}
+
+void less_than_45(unsigned char* pi, int x, int y, double X_start, double Y_start, double X_finish, double Y_finish, double thickness, int brightness, int check, double gamma)
+{
+	double A_x, A_y, B_x, B_y, C_x, C_y, D_x, D_y;
+	double k = (Y_finish - Y_start) / (X_finish - X_start);
+	double b = Y_start - X_start * k;
+	double k_perp = -1 / k;
+	double b_perp_start = Y_start - k_perp * X_start;
+	double b_perp_finish = Y_finish - k_perp * X_finish;
+	A_x = (+(thickness / 2) * sqrt(k * k + 1) + b_perp_start - b) / (k - k_perp);
+	A_y = k_perp * A_x + b_perp_start;
+	B_x = (-(thickness / 2) * sqrt(k * k + 1) + b_perp_start - b) / (k - k_perp);
+	B_y = k_perp * B_x + b_perp_start;
+	C_x = (+(thickness / 2) * sqrt(k * k + 1) + b_perp_finish - b) / (k - k_perp);
+	C_y = k_perp * C_x + b_perp_finish;
+	D_x = (-(thickness / 2) * sqrt(k * k + 1) + b_perp_finish - b) / (k - k_perp);
+	D_y = k_perp * D_x + b_perp_finish;
+//		cout << "A_x=" << A_x << " A_y=" << A_y << " B_x=" << B_x << " B_y=" << B_y << " C_x=" << C_x << " C_y=" << C_y << " D_x=" << D_x << " D_y=" << D_y << endl;
+	double dist;
+	double new_p, old_p, r_p, cop_br;
+	if (gamma == 0)
+		cop_br = sRGB_correction(brightness);
+	else
+		cop_br = gamma_correction_to_linear(brightness, gamma);
+	if (thickness > 1)
+	{
+		more_than_45_cop(pi, x, y, A_x, A_y, B_x, B_y, 0, brightness, check, gamma);
+		more_than_45_cop(pi, x, y, C_x, C_y, D_x, D_y, 0, brightness, check, gamma);
+	}
+	for (int i = 0; i < x * y; i++)
+	{
+		dist = abs(k * ((i % x) * 1.0) + b * 1.0 - i / x * 1.0) / (sqrt(k * 1.0 * k + 1 * 1.0));
+		if ((i % x >= floor(A_x)) && (i % x <= ceil(D_x)) && (i / x >= floor(C_y)) && (i % x > floor(((floor(i / x) * 1.0) - b_perp_start) * 1.0 / k_perp * 1.0)) &&  (i % x < ceil(( (i / x) * 1.0 - b_perp_finish) * 1.0 / k_perp * 1.0)))
+		{
+			double pix, new_p;
+			if (gamma == 0)
+				pix = sRGB_correction(pi[i]);
+			else
+				pix = gamma_correction_to_linear(pi[i], gamma);
+			if (dist <= thickness / 2.0)
+				pi[i] = brightness;
+			else
+				if (dist <= thickness / 2.0 + 1)
+				{
+					old_p = pix;
+					new_p = (1.0 - dist + thickness / 2.0);
+					r_p = new_p;
+					r_p = alpha_blending(old_p, cop_br, new_p);
+					if (gamma == 0)
+						pi[i] = from_sRGB_to_RGB(r_p);
+					else
+						pi[i] = gamma_correction_fr_linear(r_p, gamma);
+				}
+		}
+	} 
+}
+
+int main(int argc, char* argv[])
+{
+	char s[100];
+	int i, x, y, z, ch;
+	int brightness;
+	double thickness, X_start, Y_start, X_finish, Y_finish, gamma;
+	FILE* fi = fopen(argv[1], "rb");
+	FILE* fo = fopen(argv[2], "wb");
+	if (fi == NULL)
+	{
+		cerr << "INPUT ERROR\n";
+		return 1;
+	}
+	if (fscanf(fi, "%s", s) == 0)
+	{
+		cerr << "Critical damage name" << endl;
+		fclose(fi);
+		return 1;
+	}
+	int check = 0;
+	if (strcmp(s, "P5") == 0)
+		check = 1;
+	if (strcmp(s, "P6") == 0)
+		check = 3;
+	brightness = atoi(argv[3]);
+	thickness = strtod(argv[4], NULL);
+	X_start = strtod(argv[5], NULL);
+	Y_start = strtod(argv[6], NULL);
+	X_finish = strtod(argv[7], NULL);
+	Y_finish = strtod(argv[8], NULL);
+	if (argc > 10)
+		gamma = strtod(argv[9], NULL);
+	else
+		gamma = 0;
+	if (check == 0)
+	{
+		cerr << "Wrong type of image";
+		fclose(fi);
+		return 1;
+	}
+	if (fscanf(fi, "%i", &x) == 0)
+	{
+		cerr << "Critical damage size of picture" << endl;
+		fclose(fi);
+		return 1;
+	}
+	if (fscanf(fi, "%i", &y) == 0)
+	{
+		cerr << "Critical damage size of picture" << endl;
+		fclose(fi);
+		return 1;
+	}
+	if (fscanf(fi, "%i\n", &z) == 0)
+	{
+		cerr << "Critical damage pixel dimension" << endl;
+		fclose(fi);
+		return 1;
+	}
+	if ((x < 0) || (y < 0) || (z < 0))
+	{
+		cerr << "Just death";
+		fclose(fi);
+		return 1;
+	}
+	unsigned char* pi = new unsigned char[x * y * check];
+	unsigned char* cpypi = new unsigned char[x * y * check];
+	if (pi == nullptr)
+	{
+		cerr << "Out of memory";
+		fclose(fi);
+		return 1;
+	}
+	if (cpypi == nullptr)
+	{
+		cerr << "Out of memory";
+		fclose(fi);
+		return 1;
+	}
+	if (fread(pi, sizeof(unsigned char), x * y * check, fi) < x * y * check)
+	{
+		cerr << "Not enough bytes";
+		fclose(fi);
+		return 1;
+	}
+	if (X_start == X_finish)
+	{
+		if (Y_start > Y_finish)
+			swap(Y_start, Y_finish);
+		draw_vertical_line(pi, x, y, X_start, Y_start, X_finish, Y_finish, thickness, brightness, check, gamma);
+	}
+	else
+	{
+		if (Y_start == Y_finish)
+		{
+			if (X_start > X_finish)
+				swap(X_start, X_finish);
+			draw_horisontal_line(pi, x, y, X_start, Y_start, X_finish, Y_finish, thickness, brightness, check, gamma);
+		}
+	}
+	if ((X_start != X_finish) && (Y_start != Y_finish))
+	{
+		thickness = thickness - 1.0;
+		if (thickness < 0)
+			brightness = (thickness + 1) * brightness;
+		if (X_start > X_finish)
+		{
+			swap(X_start, X_finish);
+			swap(Y_start, Y_finish);
+		}
+		if (Y_start > Y_finish)
+		{
+			if (thickness > 0)
+				less_than_45(pi, x, y, X_start, Y_start, X_finish, Y_finish, thickness, brightness, check, gamma);
+			else
+				less_than_45_cop(pi, x, y, X_start, Y_start, X_finish, Y_finish, thickness, brightness, check, gamma);
+//			cout << "HERE";
+		}
+		else
+		{
+			if (thickness > 0)
+				more_than_45(pi, x, y, X_start, Y_start, X_finish, Y_finish, thickness, brightness, check, gamma);
+			else
+				more_than_45_cop(pi, x, y, X_start, Y_start, X_finish, Y_finish, thickness, brightness, check, gamma);
+//			cout << "TERE";
+		}
+	}
+	fprintf(fo, "%s\n%i %i\n%i\n", s, x, y, z);
+	fwrite(pi, sizeof(unsigned char), x * y * check, fo);
+	delete[] pi;
+	delete[] cpypi;
+	fclose(fo);
+	return 0;
+}
+/*
+  G:
+  cd ???????
+  lab2grTESTING.exe inputLAB2_black.pgm outputLAB2.pgm 255 1.0 200.5 2000.5 2000.5 200.5 1.1
+*/
+
+
+	
