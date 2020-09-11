@@ -1,0 +1,664 @@
+Министерство образования и науки Российской Федерации
+федеральное государственное автономное образовательное
+учреждение высшего образования
+Санкт-Петербургский исследовательский университет
+Информационных технологий, механики и оптики
+Мегафакультет трансляционных информационных технологий
+Факультет информационных технологий и программирования
+Лабораторная работа № 1
+По дисциплине «Компьютерная графика и геометрия»
+Изучение алгоритмов псевдотонирования изображений
+Выполнил студент группы M3102
+Гусев Дмитрий Алексеевич
+Проверил:
+Скаков Павел Сергеевич
+САНКТ-ПЕТЕРБУРГ
+2020
+цель работы
+Изучить алгоритмы и реализовать программу, применяющий алгоритм дизеринга к изображению в формате PGM (P5) с учетом гамма-коррекции.
+Описание работы
+Описание:
+Программа должна быть написана на C/C++ и не использовать внешние библиотеки.
+
+Аргументы передаются через командную строку:
+program.exe <имя_входного_файла> <имя_выходного_файла> <градиент> <дизеринг> <битность> <гамма>
+где
+⦁	<имя_входного_файла>, <имя_выходного_файла>: формат файлов: PGM P5; ширина и высота берутся из <имя_входного_файла>;
+⦁	<градиент>: 0 - используем входную картинку, 1 - рисуем горизонтальный градиент (0-255) (ширина и высота берутся из <имя_входного_файла>);
+⦁	<дизеринг> - алгоритм дизеринга:
+⦁	0 – Нет дизеринга;
+⦁	1 – Ordered (8x8);
+⦁	2 – Random;
+⦁	3 – Floyd–Steinberg;
+⦁	4 – Jarvis, Judice, Ninke;
+⦁	5 - Sierra (Sierra-3);
+⦁	6 - Atkinson;
+⦁	7 - Halftone (4x4, orthogonal);
+⦁	<битность> - битность результата дизеринга (1..8);
+⦁	<гамма>: 0 - sRGB гамма, иначе - обычная гамма с указанным значением.
+Теоретическая часть
+⦁	Преобразование 0(уменьшение битности каждого пикселя, без использования какого-либо дизеринга).  для округления текущего значения цвета до ближайшего, который можно отобразить в задаваемой битности B, из целочисленного значения цвета берутся B старших бит и дублируются сдвигами по B бит в текущее значение цвета.
+⦁	Ordered dithering дизеринг, не зависящий от ошибок остальных пикселей. Только от карты порогов. Дизеринг производится относительно линейного пикселя, после чего к уже измененным пикселям применяется гамма-коррекция.
+ 
+⦁	Random Dithering аналогично Ordered Dithering’у только вместо значений матрицы используются случайные значения от 0 до 1.
+⦁	Floyd-Steinberg – дизеринг, изменение зависит не только от самого пикселя, но и от значения ошибки его соседей в матрице.
+ 
+⦁	Jarvis, Judice, Ninke – аналогично Floy-Steinberg, только матрица, по которой суммируется ошибки больше 
+⦁	Sierra. Аналогично JJN и Floyd-Steinberg. На изменение пикселя влияет не только значение, но и значение ошибок соседних пикселей.
+ 
+⦁	Atkinson. Аналогично JJN и Floyd-Steinberg, с другой матрицей.  
+В современных графичесих приложениях этот метод встречается под именем «уменьшить выцветание». Рассеивание только части ошибок помогает уменьшить зернистость, но непрерывные светлые и темные участки изображения могут потерять цвет.
+⦁	Halftone разные тональности создаются расположением на разном расстоянии фигур (разной плотности самих фигур) и разной тональности фигур. 
+Алгоритмы с распространением (рассеиванием) ошибок распределяют остаток квантования по соседним пикселям, которые еще не были обработаны.
+В отличие от предыдущих алгоритмов, данные алгоритмы работают с некоторой окрестностью пикселя то, что алгоритм делает в одном месте, влияет на то, что происходит в других местах. Это означает, что требуется буферизация и усложняет параллельную обработку.
+Рассеивание ошибок следует более умному подходу к проблеме. Как вы могли предположить, рассеивание ошибок работает путем «рассеивания» (распространения) ошибки каждого вычисления в соседние пиксели. 
+Таким образом, алгоритмы с рассеянием ошибки действуют следующим образом:
+⦁	Обход по пикселям совершается слева направо, сверху вниз
+⦁	При анализе текущего пикселя (color):
+a.	определяется его новый цвет color' через findNearestPaletteColor
+b.	рассчитывается ошибка как color-color'
+c.	затем ошибка распространяется согласно используемому паттерну/алгоритму (см. далее)
+
+
+Преобразования
+Всего в лабораторной работе выполнено 8 преобразований изображений.
+⦁	Изменение битности изображения без использования какого-либо дизеринга. Для каждого пикселя запускается функция, которая циклически повторяет N старших битов изображения(до всего 8 битов в значении одного пикселя).
+⦁	Ordered dithering. Для каждого пикселя используется матрица преобразований пикселя, место в матрице преобразований считается как остаток от деления номера строки и столбца на размер матрицы преобразований.
+⦁	Random dithering. Для каждого пикселя применяется изменение цвета пикселя, только вместо матрицы преобразований используется рандом от 0 до 1, где значения получаются путем получения рандомного числа, взятия остатка от деления этого числа на 64, а далее остаток делится на 64. Для улучшения визуального эффекта из получившегося результата вычитается 0.5. Это число и будет нашим значением, на которое будет изменяться цвет пикселя.
+⦁	Floyd-Steinberg; Jarvis, Judice, Ninke; Sierra-3; Atkinson. Работают одинаково, отличаются лишь матрицы для получения новых ошибок. Для каждого пикселя применяется функция, где будет использован дополнительный массив для хранения ошибок. Значения ошибки будут увеличиваться по соответствующей матрице(индексы определяются как смещение относительно данного пикселя), далее ошибка(разница значений между значением пикселя с битностью 8 и значения пикселя с новой битностью) умножается на соответствующий элемент матрицы. И прибавляется в массив ошибок для каждого пикселя к соответствующему уже значению ошибки для данного пикселя.
+⦁	Halftone. 4x4. Аналогично Ordered Dithering, только используется новая матрица
+Также соглансо условиям лабораторной работы необходимо учитывать гамма-коррекцию, гамма-коррекция бывает двух видов: гамма коррекция с коэффициентом и sRGB.
+⦁	Гамма коррекция выполняется по формуле out = k * in ^ (gamma), соответственно это будет значение нашего пикселя на изображении, тогда линейное значение пикселя это in = (out / k) ^ (1/ gamma) в формулах используется значение цвета, приведенное к диапазону [0;1].
+⦁	SRGB. Используются практически те же формулы, однако в значениях близких к черным, цвет становится линейным.
+ 
+ 
+U в данном случае – цвет, деленный на 255.
+Экспериментальная часть
+Лабораторная работа выполнена на языке C++17.
+Реализация
+Функция отрисовки градиента.
+void drawgradient(double* pi, int x, int y, double gamma)
+{
+	double copp;
+    for (int i = 0; i < x * y; i++)
+	{
+		copp = (i % x) / (x * 1.0 / 255.0);
+        if (gamma == 0)
+            pi[i] = from_sRGB_to_RGB(copp);
+        else
+            pi[i] = gamma_correction_fr_linear(copp, gamma);
+	}
+}
+Так как градиент изначально рисуется линейными пикселями(без гамма-коррекции), то после его отрисовки используется функция, которая преобразует цвета.
+Сами функции гамма коррекции. Используются функции для перевода в линейные цвета(обратная гамма коррекция, и обратный перевод для sRGB).
+double gamma_correction_to_linear(double pi, double gamma)
+{
+    return round(255.0 * pow(pi / 255.0, 1.0 / gamma));
+}
+
+double gamma_correction_fr_linear(double pi, double gamma)
+{
+    return round(255.0 * pow(pi / 255.0, gamma));
+}
+
+double sRGB_correction(double pi)
+{
+    if (pi / 255.0 <= 0.0031308)
+        return min(round((12.92 * pi / 255.0) * 255.0), 255.0);
+    else
+        return min(round((1.055 * pow(pi / 255.0, (1.0 / 2.4)) - 0.055 ) * 255.0), 255.0);
+}
+
+double from_sRGB_to_RGB(double pi)
+{
+    if (pi / 255.0 <= 0.04045)
+        return min((round(pi / 255.0 / 12.92) * 255.0), 255.0);
+    else
+        return min(round(pow(((200.0 * pi / 255.0 + 11) / 211.0), 12.0 / 5.0) * 255.0), 255.0);
+}
+gamma_correction_to_linear – перевод цветов из исходной гаммы в линейные.
+gamma_correction_fr_linear – сама гамма-коррекция линейных цветов
+sRGB_correction – коррекция sRGB
+from_sRGB_to_RGB – перевод из гаммы sRGB в линейные цвета
+В значении gamma лежит либо значение гаммы, если оно указано, либо лежит 0, если в командную строку ничего не подается в качестве значения.
+Сама функция отрисовки градиента вызывается если поднят флаг gradient
+Преобразования
+Выбор команды производится посредством конструкции case
+switch (TypeOfDithering)
+    {
+    case 0: WithoutDithering(pi_to_work, x, y, Bits, gamma);
+        break;
+    case 1: OrderedDithering(pi_to_work, x, y, Bits, gamma);
+        break;
+    case 2: RandomDithering(pi_to_work, x, y, Bits, gamma);
+        break;
+    case 3: Floyd_Steinberg(pi_to_work, cpypi, x, y, Bits, gamma);
+        break;
+    case 4: JarviceDithering(pi_to_work, cpypi, x, y, Bits, gamma);
+        break;
+    case 5: Siera(pi_to_work, cpypi, x, y, Bits, gamma);
+        break;
+    case 6: Atkinson(pi_to_work, cpypi, x, y, Bits, gamma);
+        break;
+    case 7: Halftone(pi_to_work, x, y, Bits, gamma);
+        break;
+    default: break;
+    }
+
+⦁	Без дизеринга. Изменение цветов изображения работает за один проход по массиву значений пикселей, изменяя значения яркости на ближайшие из палитры с помощью функции NearestInPallet. Не требует выделения дополнительной памяти. Для функции изменения битности без исопльзования какого-либо дизеринга используется функция WithoutDithering.
+⦁	Ordered Dithering. Работает за один проход по всем пикселям изображения. Для корректной работы необходимо хранение матрицы Matr. Не требуется дополнительная память для создания нового изображения. Для данного типа дизеринга используется функция OrderedDithering.
+⦁	Random dithering. Работает за один проход по массиву значений пикселей. Не требуется дополнительная память для создания нового изображения. Не требует никаких матриц для корректной работы дизеринга. Для преобразования используется функция RandomDithering.
+⦁	Floyd-Steinberg. Данный дизеринг, как и все, работает за один проход по массиву значений пикселей. Используется дополнительная память для хранения ошибок, которые используются для получения новых значений пикселей внутри дизеринга.
+double* cpypi = new double[x * y * check];
+Для преобразования и записи результата в файл используется функция Floyd_Steinberg.
+⦁	Jarvise, Judice, Ninke. Данный дизеринг, как и все, работает за один проход по массиву значений пикселей. Используется дополнительная память для хранения ошибок, которые используются для получения новых значений пикселей внутри дизеринга.
+double* cpypi = new double[x * y * check];
+Для преобразования и записи результата в файл используется функция JarviceDithering.
+⦁	Sierra(Sierra-3). Данный дизеринг, как и все, работает за один проход по массиву значений пикселей. Используется дополнительная память для хранения ошибок, которые используются для получения новых значений пикселей внутри дизеринга.
+double* cpypi = new double[x * y * check];
+Для преобразования и записи результата в файл используется функция Siera.
+⦁	Atkinson, как и все, работает за один проход по массиву значений пикселей. Используется дополнительная память для хранения ошибок, которые используются для получения новых значений пикселей внутри дизеринга.
+double* cpypi = new double[x * y * check];
+Для преобразования и записи результата в файл используется функция Atkinson.
+⦁	Halftone. Данный дизеринг, как и все, работает за один проход по массиву значений пикселей. Используется дополнительная память для хранения ошибок, которые используются для получения новых значений пикселей внутри дизеринга. Также используется дополнительная матрица matr4x4, согласно которой и строятся объекты, используемые в полутонировании. 
+double* cpypi = new double[x * y * check];
+Для преобразования и записи результата в файл используется функция Halftone.
+Исходный код: 
+В ходе работы были использован pi_to_work формата double для более точного использования dithering’a. Необходимость преобразовывать значения пикселя в double вызывает необходимость использования функций copy_to_work, где в качестве входного подается массив значений исходной картинки, а выходным является технический массив для использования внутри дизеринга. work_for_out берет в качестве входных значений массив типа double (pi_to_work) и переводит их в unsigned char, для получения выходного массива.
+
+ #include <iostream>
+#include <cmath>
+#include <algorithm>
+#include <cstring>
+#include<stdio.h>
+
+using namespace std;
+double Matr[8][8] =
+{
+    {0, 48.0 / 64, 12.0 / 64, 60.0 / 64, 3.0 / 64, 51.0 / 64, 15.0 / 64, 63.0 / 64},
+    {32.0 / 64, 16.0 / 64, 44.0 / 64, 28.0 / 64, 35.0 / 64, 19.0 / 64, 47.0 / 64, 31.0 / 64},
+    {8.0 / 64, 56.0 / 64, 4.0 / 64, 52.0 / 64, 11.0 / 64, 59.0 / 64, 7.0 / 64, 55.0 / 64},
+    {40.0 / 64, 24.0 / 64, 36.0 / 64, 20.0 / 64, 43.0 / 64, 27.0 / 64, 39.0 / 64, 23.0 / 64},
+    {2.0 / 64, 50.0 / 64, 14.0 / 64, 62.0 / 64, 1.0 / 64, 49.0 / 64, 13.0 / 64, 61.0 / 64},
+    {34.0 / 64, 18.0 / 64, 46.0 / 64, 30.0 / 64, 33.0 / 64, 17.0 / 64, 45.0 / 64, 29.0 / 64},
+    {10.0 / 64, 58.0 / 64, 6.0 / 64, 54.0 / 64, 9.0 / 64, 57.0 / 64, 5.0 / 64, 53.0 / 64},
+    {42.0 / 64, 26.0 / 64, 38.0 / 64, 22.0 / 64, 41.0 / 64, 25.0 / 64, 37.0 / 64, 21.0 / 64}
+};
+double matr4x4[4][4] =
+{
+    {7.0 / 16.0, 13.0 / 16.0, 11.0 / 16.0, 4.0 / 16.0},
+    {12.0 / 16.0, 16.0 / 16.0, 14.0 / 16.0, 8.0 / 16.0},
+    {10.0 / 16.0, 15.0 / 16.0, 6.0 / 16.0, 2.0 / 16.0},
+    {5.0 / 16.0, 9.0 / 16.0, 3.0 / 16.0, 1.0 / 16.0}
+};
+
+double gamma_correction_to_linear(double pi, double gamma)
+{
+    return round(255.0 * pow(pi / 255.0, 1.0 / gamma));
+}
+
+double gamma_correction_fr_linear(double pi, double gamma)
+{
+    return round(255.0 * pow(pi / 255.0, gamma));
+}
+
+double sRGB_correction(double pi)
+{
+    if (pi / 255.0 <= 0.0031308)
+        return min(round((12.92 * pi / 255.0) * 255.0), 255.0);
+    else
+        return min(round((1.055 * pow(pi / 255.0, (1.0 / 2.4)) - 0.055 ) * 255.0), 255.0);
+}
+
+double from_sRGB_to_RGB(double pi)
+{
+    if (pi / 255.0 <= 0.04045)
+        return min((round(pi / 255.0 / 12.92) * 255.0), 255.0);
+    else
+        return min(round(pow(((200.0 * pi / 255.0 + 11) / 211.0), 12.0 / 5.0) * 255.0), 255.0);
+}
+
+void drawgradient(double* pi, int x, int y, double gamma)
+{
+	double copp;
+    for (int i = 0; i < x * y; i++)
+	{
+		copp = (i % x) / (x * 1.0 / 255.0);
+        if (gamma == 0)
+            pi[i] = from_sRGB_to_RGB(copp);
+        else
+            pi[i] = gamma_correction_fr_linear(copp, gamma);
+	}
+}
+
+
+
+unsigned char NearestInPallet(unsigned char pixel, int sizeofPallet)
+{
+    int copy = pixel >> (8 - sizeofPallet);
+    int cop1 = 0;
+    for (int i = 1; i * sizeofPallet <= 8; i++)
+    {
+        int sdv = 8 - i * sizeofPallet;
+        cop1 += copy << sdv;
+    }
+    return cop1;
+}
+void OrderedDithering(double* pi, int x, int y, int Bits, double gamma)
+{
+    double cpy = 255.0 / (Bits * 1.0);
+    double t;
+    double techt;
+    for (int i = 0; i < x * y; i++)
+    {
+        if (gamma == 0)
+            t = sRGB_correction(pi[i]) + round(cpy * (Matr[(i % x) % 8][(i / x) % 8] - 0.5));
+        else
+            t = gamma_correction_to_linear(pi[i], gamma) + round(cpy * (Matr[(i % x) % 8][(i / x) % 8] - 0.5));
+        t = max(t, 0.0);
+        t = min(t, 255.0);
+        t = NearestInPallet(round(t), Bits);
+        if (gamma == 0)
+            t = from_sRGB_to_RGB(t);
+        else
+            t = gamma_correction_fr_linear(t, gamma);
+        pi[i] = NearestInPallet(t, Bits);
+    }
+}
+
+void Halftone(double* pi, int x, int y, int Bits, double gamma)
+{
+    double cpy = 255.0 / (Bits * 1.0);
+    double t;
+    double techt;
+    for (int i = 0; i < x * y; i++)
+    {
+        double copp;
+        if (gamma == 0)
+            copp = sRGB_correction(pi[i]);
+        else
+            copp = gamma_correction_to_linear(pi[i], gamma);
+        t = copp + round(cpy * (matr4x4[(i % x) % 4][(i / x) % 4] - 0.5));
+        t = min(255.0, t);
+        t = max(0.0, t);
+        t = NearestInPallet(round(t), Bits);
+        if (gamma == 0)
+            t = from_sRGB_to_RGB(t);
+        else
+            t = gamma_correction_fr_linear(t, gamma);
+        pi[i] = NearestInPallet(t, Bits);
+    }
+}
+
+void WithoutDithering(double* pi, int x, int y, int Bits, double gamma)
+{
+    for (int i = 0; i < x * y; i++)
+    {
+//		pi[i] = gamma_correction_to_linear(pi[i], gamma);
+        pi[i] = NearestInPallet(pi[i], Bits);
+//        pi[i] = gamma_correction_fr_linear(pi[i], gamma);
+	}
+}
+void JarviceDithering(double* pi, double* cpypi, int x, int y, int Bits, double gamma)
+{
+    for (int i = 0; i < x * y; i++)
+    {
+        double old;
+        if (gamma == 0)
+            old = sRGB_correction(pi[i]);
+        else
+            old = gamma_correction_to_linear(pi[i], gamma);
+        double t = old + round(cpypi[i]);
+        if (gamma == 0)
+            t = from_sRGB_to_RGB(t);
+        else
+            t = gamma_correction_fr_linear(t, gamma);
+        if (t < 0)
+            t = 0;
+        if (t > 255)
+            t = 255;
+        pi[i] = NearestInPallet(round(t), Bits);
+        double copp;
+        if (gamma == 0)
+            copp = sRGB_correction(pi[i]);
+        else
+            copp = gamma_correction_to_linear(pi[i], gamma);
+        double err = old + cpypi[i] - copp;
+        if (((i + 1) % x > i % x) && ((i + 1) < x * y))
+            cpypi[i + 1] += (err * 7.0 / 48.0);
+        if (((i + 2) % x > i % x) && ((i + 2) < x * y))
+            cpypi[i + 2] += (err * 5.0 / 48.0);
+        if ((i + x) < x * y)
+            cpypi[i + x] += (err * 7.0 / 48.0);
+        if (((i + x - 2) < x * y) && (i % x > (i + x - 2) % x))
+            cpypi[i + x - 2] += ((err) * 3.0 / 48.0);
+        if ((i + x - 1 < x * y) && (i % x > (i + x - 1) % x))
+            cpypi[i + x - 1] += ((err) * 5.0 / 48.0);
+        if ((i + x + 1 < x * y) && (i % x < (i + x + 1) % x))
+            cpypi[i + x + 1] += ((err) * 5.0 / 48.0);
+        if ((i + x + 2 < x * y) && (i % x < (i + x + 2) % x))
+            cpypi[i + x + 2] += ((err) * 3.0 / 48.0);
+        if ((i + 2 * x - 2 < x * y) && (i % x > (i + 2 * x - 2) % x))
+            cpypi[i + 2 * x - 2] += ((err) * 1.0 / 48.0);
+        if ((i + 2 * x - 1 < x * y) && (i % x > (i + 2 * x - 1) % x))
+            cpypi[i + 2 * x - 1] += ((err) * 3.0 / 48.0);
+        if (i + 2 * x < x * y)
+            cpypi[i + 2 * x] += ((err) * 5.0 / 48.0);
+        if ((i + 2 * x + 1 < x * y) && ((i + 2 * x + 1) % x > i % x))
+            cpypi[i + 2 * x + 1] += ((err) * 3.0 / 48.0);
+        if ((i + 2 * x + 2 < x * y) && ((i + 2 * x + 2) % x > i % x))
+            cpypi[i + 2 * x + 2] += ((err) * 1.0 / 48.0);
+    }
+}
+
+void Siera(double* pi, double* cpypi, int x, int y, int Bits, double gamma)
+{
+    for (int i = 0; i < x * y; i++)
+    {
+        double old = pi[i];
+        if (gamma == 0)
+            old = sRGB_correction(pi[i]);
+        else
+            old = gamma_correction_to_linear(pi[i], gamma);
+        double t = old + round(cpypi[i]);
+        if (t < 0)
+            t = 0;
+        if (t > 255)
+            t = 255;
+        if (gamma == 0)
+            t = from_sRGB_to_RGB(t);
+        else
+            t = gamma_correction_fr_linear(t, gamma);
+        pi[i] = NearestInPallet(round(t), Bits);
+        double copp;
+        if (gamma == 0)
+            copp = sRGB_correction(pi[i]);
+        else
+            copp = gamma_correction_to_linear(pi[i], gamma);
+        double err = old + cpypi[i] - copp;
+        if ((i % x < (i + 1) % x) && (i + 1 < x * y))
+            cpypi[i + 1] += (err * 5.0 / 32.0);
+        if ((i % x < (i + 2) % x) && (i + 2 < x * y))
+            cpypi[i + 2] += (err * 3.0 / 32.0);
+        if ((i % x > (i + x - 2) % x) && (i + x - 2 < x * y))
+            cpypi[i + x - 2] += (err * 2.0 / 32.0);
+        if ((i % x > (i + x - 1) % x) && (i + x - 1 < x * y))
+            cpypi[i + x - 1] += (err * 4.0 / 32.0);
+        if (i + x < x * y)
+            cpypi[i + x] += (err * 5.0 / 32.0);
+        if ((i % x > (i + x + 1) % x) && (i + x + 1 < x * y))
+            cpypi[i + x + 1] += (err * 4.0 / 32.0);
+        if ((i % x > (i + x + 2) % x) && (i + x + 2 < x * y))
+            cpypi[i + x + 2] += (err * 2.0 / 32.0);
+        if ((i % x > (i + 2 * x - 1) % x) && (i + 2 * x - 1 < x * y))
+            cpypi[i + 2 * x - 1] += (err * 2.0 / 32.0);
+        if (i + 2 * x < x * y)
+            cpypi[i + 2 * x] += (err * 3.0 / 32.0);
+        if ((i % x > (i + 2 * x - 1) % x) && (i + 2 * x + 1 < x * y))
+            cpypi[i + 2 * x + 1] += (err * 2.0 / 32.0);
+    }
+}
+
+void Atkinson(double* pi, double* cpypi, int x, int y, int Bits, double gamma)
+{
+    for (int i = 0; i < x * y; i++)
+    {
+        double old = pi[i];
+        if (gamma == 0)
+            old = sRGB_correction(pi[i]);
+        else
+            old = gamma_correction_to_linear(pi[i], gamma);
+        double t = old + round(cpypi[i]);
+        if (t < 0)
+            t = 0;
+        if (t > 255)
+            t = 255;
+        if (gamma == 0)
+            t = from_sRGB_to_RGB(t);
+        else
+            t = gamma_correction_fr_linear(t, gamma);
+        pi[i] = NearestInPallet(round(t), Bits);
+        double copp;
+        if (gamma == 0)
+            copp = sRGB_correction(pi[i]);
+        else
+            copp = gamma_correction_to_linear(pi[i], gamma);
+        double err = old + cpypi[i] - copp;
+        if ((i % x < (i + 1) % x) && (i + 1 < x * y))
+            cpypi[i + 1] += (err * 1.0 / 8.0);
+        if ((i % x < (i + 2) % x) && (i + 2 < x * y))
+            cpypi[i + 2] += (err * 1.0 / 8.0);
+        if (i + x < x * y)
+            cpypi[i + x] += (err * 1.0 / 8.0);
+        if ((i + x - 1 < x * y) && (i % x > (i - 1) % x))
+            cpypi[i + x - 1] += (err * 1.0 / 8.0);
+        if ((i + x + 1 < x * y) && (i % x < (i + 1) % x))
+            cpypi[i + x + 1] += (err * 1.0 / 8.0);
+        if (i + 2 * x < x * y)
+            cpypi[i + 2 * x] += (err * 1.0 / 8.0);
+    }
+}
+
+void RandomDithering(double* pi, int x, int y, int Bits, double gamma)
+{
+    double cpy = 255.0 / (Bits * 1.0);
+    double t;
+    double techt;
+    for (int i = 0; i < x * y; i++)
+    {
+        double copp;
+        if (gamma == 0)
+            copp = sRGB_correction(pi[i]);
+        else
+            copp = gamma_correction_to_linear(pi[i], gamma);
+        t = copp + round(cpy * ((rand() % 64) / 64.0 - 0.5));
+        t = min(255.0, t);
+        t = max(0.0, t);
+        t = NearestInPallet(t, Bits);
+        if (gamma == 0)
+            t = from_sRGB_to_RGB(t);
+        else
+            t = gamma_correction_fr_linear(t, gamma);
+        pi[i] = NearestInPallet(round(t), Bits);
+    }
+}
+
+void Floyd_Steinberg(double* pi, double* cpypi, int x, int y, int Bits, double gamma)
+{
+    for (int i = 0; i < x * y; i++)
+    {
+        double old;
+        if (gamma == 0)
+            old = sRGB_correction(pi[i]);
+        else
+            old = gamma_correction_to_linear(pi[i], gamma);
+        double t = old + round(cpypi[i]);
+        if (t < 0)
+            t = 0;
+        if (t > 255)
+            t = 255;
+        if (gamma == 0)
+            t = from_sRGB_to_RGB(t);
+        else
+            t = gamma_correction_fr_linear(t, gamma);
+        pi[i] = NearestInPallet(round(t), Bits);
+        double copp;
+        if (gamma == 0)
+            copp = sRGB_correction(pi[i]);
+        else
+            copp = gamma_correction_to_linear(pi[i], gamma);
+        double err = old + cpypi[i] - copp;
+        if ((i / x < y - 1) && (i % x == x - 1))
+        {
+            cpypi[i + x] += (err * 5.0 / 16.0);
+            cpypi[i + x - 1] += (err * 3.0 / 16.0);
+        }
+        if ((i / x < y - 1) && (i % x == 0))
+        {
+            cpypi[i + 1] += (err * 7.0 / 16.0);
+            cpypi[i + x] += (err * 5.0 / 16.0);
+            cpypi[i + x + 1] += (err * 1.0 / 16.0);
+        }
+        if ((i / x < y - 1) && (i % x > 0) && (i % x < x - 1))
+        {
+            cpypi[i + 1] += (err * 7.0 / 16.0);
+            cpypi[i + x] += (err * 5.0 / 16.0);
+            cpypi[i + x + 1] += (err * 1.0 / 16.0);
+            cpypi[i + x - 1] += (err * 3.0 / 16.0);
+        }
+        if ((i / x == y - 1) && (i % x < x - 1))
+            cpypi[i + 1] += (err * 7.0 / 16.0);
+    }
+}
+
+
+void copy_to_work(unsigned char* pi, double* pi_to_work, int x, int y, int check)
+{
+    for (int i = 0; i < x * y * check; i++)
+        pi_to_work[i] = pi[i];
+}
+
+void for_out(unsigned char* pi, double* pi_to_work, int x, int y, int check)
+{
+    for (int i = 0; i < x * y * check; i++)
+        pi[i] = (unsigned char)(round(pi_to_work[i]));
+}
+
+int main(int argc, char* argv[])
+{
+    char s[100];
+    int i, x, y, z, ch;
+    FILE* fi = fopen(argv[1], "rb");
+    if (fi == NULL)
+    {
+        cerr << "INPUT ERROR\n";
+        return 1;
+    }
+    FILE* fo = fopen(argv[2], "wb");
+    if (fo == NULL)
+    {
+        cerr << "OUTPUT ERROR\n";
+        return 1;
+    }
+    if (fscanf(fi, "%s", s) == 0)
+    {
+        cerr << "Critical damage name" << endl;
+        fclose(fi);
+        return 1;
+    }
+    int check = 0;
+    if (strcmp(s, "P5") == 0)
+        check = 1;
+    if (strcmp(s, "P6") == 0)
+        check = 3;
+    if (check == 0)
+    {
+        cerr << "Wrong type of image";
+        fclose(fi);
+        return 1;
+    }
+    if (fscanf(fi, "%i", &x) == 0)
+    {
+        cerr << "Critical damage size of picture" << endl;
+        fclose(fi);
+        return 1;
+    }
+    if (fscanf(fi, "%i", &y) == 0)
+    {
+        cerr << "Critical damage size of picture" << endl;
+        fclose(fi);
+        return 1;
+    }
+    if (fscanf(fi, "%i\n", &z) == 0)
+    {
+        cerr << "Critical damage pixel dimension" << endl;
+        fclose(fi);
+        return 1;
+    }
+    if ((x < 0) || (y < 0) || (z < 0))
+    {
+        cerr << "Just death";
+        fclose(fi);
+        return 1;
+    }
+    unsigned char* pi = new unsigned char[x * y * check];
+    double* pi_to_work = new double[x * y * check];
+    double* cpypi = new double[x * y * check];
+    if (pi == nullptr)
+    {
+        cerr << "Out of memory";
+        fclose(fi);
+        return 1;
+    }
+    if (cpypi == nullptr)
+    {
+        cerr << "Out of memory";
+        fclose(fi);
+        return 1;
+    }
+    for (int i = 0; i < x * y * check; i++)
+    {
+        cpypi[i] = 0;
+    }
+    if (fread(pi, sizeof(unsigned char), x * y * check, fi) < x * y * check)
+    {
+        cerr << "Not enough bytes";
+        fclose(fi);
+        return 1;
+    }
+    copy_to_work(pi, pi_to_work, x, y, check);
+    bool gradient = atoi(argv[3]);
+    int Bits, TypeOfDithering;
+    TypeOfDithering = atoi(argv[4]);
+    if ((TypeOfDithering < 0) || (TypeOfDithering > 7))
+    {
+        cerr << "Wrong command. Go away";
+        return 1;
+    }
+    Bits = atoi(argv[5]);
+    double gamma;
+    if (argc < 7)
+        gamma = 0;
+    else
+        gamma = stof(argv[6]);
+    if (gradient)
+        drawgradient(pi_to_work, x, y, gamma);
+    switch (TypeOfDithering)
+    {
+    case 0: WithoutDithering(pi_to_work, x, y, Bits, gamma);
+        break;
+    case 1: OrderedDithering(pi_to_work, x, y, Bits, gamma);
+        break;
+    case 2: RandomDithering(pi_to_work, x, y, Bits, gamma);
+        break;
+    case 3: Floyd_Steinberg(pi_to_work, cpypi, x, y, Bits, gamma);
+        break;
+    case 4: JarviceDithering(pi_to_work, cpypi, x, y, Bits, gamma);
+        break;
+    case 5: Siera(pi_to_work, cpypi, x, y, Bits, gamma);
+        break;
+    case 6: Atkinson(pi_to_work, cpypi, x, y, Bits, gamma);
+        break;
+    case 7: Halftone(pi_to_work, x, y, Bits, gamma);
+        break;
+    default: break;
+    }
+    fprintf(fo, "%s\n%i %i\n%i\n", s, x, y, z);
+    for_out(pi, pi_to_work, x, y, check);
+    fwrite(pi, sizeof(unsigned char), x * y * check, fo);
+    delete[] pi;
+    delete[] cpypi;
+    delete[] pi_to_work;
+    fclose(fo);
+    return 0;
+}
+/*
+  G:
+  cd ???????
+  test.exe start2.pgm outputlab3.pgm 1 4 4 2.2
+*/
+
+
+
+Вывод
+В ходе проделанной работы были получены следующие результаты: полутонирование, изменение битности без использования какого-либо дизеринга и ordered dithering используются без дополнительных массивов, созданных отдельно для данных дизерингов. Для Atkinson, JarviceDithering, Floyd_Steinberg, Siera используется доп.память размером с исходную картинку для хранения ошибки каждого значения пикселя.
