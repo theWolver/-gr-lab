@@ -1,0 +1,369 @@
+Министерство образования и науки Российской Федерации
+федеральное государственное автономное образовательное
+учреждение высшего образования
+Санкт-Петербургский исследовательский университет
+Информационных технологий, механики и оптики
+Мегафакультет трансляционных информационных технологий
+Факультет информационных технологий и программирования
+Лабораторная работа № 1
+По дисциплине «Компьютерная графика и геометрия»
+Изучение простых преобразований изображений
+Выполнил студент группы M3102
+Гусев Дмитрий Алексеевич
+Проверил:
+Скаков Павел Сергеевич
+САНКТ-ПЕТЕРБУРГ
+2020
+цель работы
+Изучить алгоритмы и реализовать программу, выполняющую простые преобразования серых и цветных изображений в формате PNM.
+Описание работы
+Программа должна поддерживать серые и цветные изображения (варианты PNM P5 и P6), самостоятельно определяя формат по содержимому.
+Аргументы программе передаются через командную строку:
+lab#.exe <имя_входного_файла> <имя_выходного_файла> <преобразование>
+где <преобразование>:
+0 - инверсия,
+1 - зеркальное отражение по горизонтали,
+2 - зеркальное отражение по вертикали,
+3 - поворот на 90 градусов по часовой стрелке,
+4 - поворот на 90 градусов против часовой стрелки.
+Программа должна быть написана на C/C++ и не использовать внешние библиотеки.
+
+Теоретическая часть
+Описание хранения данных изображения в формате PNM
+В начале файла содержится следующие метаданные, представляющих собой текст:
+Тип данных: P5 – для изображений в градациях серого или же P6 – для цветных изображений
+Далее следует одинарный перевод строки.
+Ширина и высота изображения в десятичном виде через пробел. 
+Перевод строки.
+Максимально возможное значение яркости. В данной лабораторной работе мы работаем с максимально возможным значением 255 для каждого пикселя, поэтому данные каждого пикселя хранятся в виде одного байта. Перевод строки.
+Пиксели изображения хранятся в двоичном виде, для изображений в градациях серого(P5) каждый байт - это яркость пикселя. Для цветных изображений(P6) хранятся 3 байта яркости цветов в формате RGB.
+Преобразования
+Всего в лабораторной работе выполнено 5 преобразований изображений.
+Инверсия. Инверсия представляет собой изменение значения яркости каждого пикселя на противоположное (значение, получаемое путем вычитания из максимально возможной яркости пикселя яркости самого пикселя).
+Зеркальное отражение по горизонтали. Зеркальное отражение по горизонтали представляет собой обмен пикселей на симметричные относительно серединного столбца.
+Зеркальное отражение по вертикали. Зеркальное отражение по вертикали представляет собой обмен пикселей на симметричные относительно серединной строки.
+Поворот на 90 градусов по часовой стрелке. Поворот на 90 градусов по часовой стрелке представляет собой создание нового изображения путем записи столбцов изображения в строки нового изображения, начиная с крайнего левого столбца, заканчивая крайним правым, идя снизу вверх.
+Поворот на 90 градусов против часовой стрелки. Поворот на 90 градусов против часовой стрелки представляет собой создание нового изображения путем записи столбцов изображения в строки нового изображения, начиная с крайнего правого столбца, заканчивая крайним левым, идя сверху вниз.
+Экспериментальная часть
+Лабораторная работа выполнена на языке C++17.
+Хранение данных изображения и заголовка
+Данные заголовка файла хранятся в переменных:
+char s[3];
+int x, y, z;
+Чтение производится при помощи функции fscanf. Одновременно производится проверка на то, были ли корректно считаны данные из файла:
+if (fscanf(fi, "%s", s) == 0)
+    {
+    	cout << "Critical damage name" << endl;
+    	fclose(fi);
+    	return 1;
+	}
+    int check = 0;
+    if (strcmp(s,"P5") == 0)
+    	check = 1;
+    if (strcmp(s,"P6") == 0)	
+		check = 3;
+	if (check == 0)
+	{
+		cout << "Wrong type of image";
+		fclose(fi);
+		return 1;
+	}
+	if (fscanf(fi, "%i", &x) == 0)
+	{
+    	cout << "Critical damage size of picture" << endl;
+    	fclose(fi);
+    	return 1;
+	}
+    if (fscanf(fi, "%i", &y) == 0)
+    {
+    	cout << "Critical damage size of picture" << endl;
+    	fclose(fi);
+    	return 1;
+	}
+    if (fscanf(fi, "%i\n", &z) == 0)
+    {
+    	cout << "Critical damage pixel dimension" << endl;
+    	fclose(fi);
+    	return 1;
+	}
+Где: s – тип файла, x – ширина изображения, y – высота изображения, z – максимально возможное значение яркости.
+Общее количество байт самой картинки для считывания вычисляется по формуле x * y * check
+if (strcmp(s,"P5") == 0)
+    	check = 1;
+    if (strcmp(s,"P6") == 0)	
+		check = 3;
+	if (check == 0)
+	{
+		cout << "Wrong type of image";
+		fclose(fi);
+		return 1;
+	}
+check – переменная, хранящая 3 в случае цветного изображение, 1 в обратном случае.
+Данные пикселей хранятся в одномерном динамическом массиве, выделяющемся в куче:
+unsigned char *pi = new unsigned char [x * y * check];
+unsigned char *cpypi = new unsigned char[x * y * check];
+И считываются при помощи функции fread с проверкой на количество байт, которые считали:
+if (fread(pi, sizeof(unsigned char), x * y * check, fi) < x * y * check)
+{
+	cout << "Not enough bytes";
+	fclose(fi);
+	return 1;
+}
+Преобразования
+Выбор команды производится посредством конструкции case
+if (argc != 4)
+{
+	cout << "Error no command";
+	fclose(fi);
+	return 1;
+}
+    ch = atoi(argv[3]);
+    fclose(fi);
+if ((ch < 0)||(ch > 4))
+    {
+    	cout << "Wrong command" << endl;
+    	return 1;
+	}
+    FILE *fo = fopen(argv[2], "wb");
+    if (fo == NULL)
+    {
+        cout << "OUTPUT ERROR\n";
+        return 1;
+    }
+
+//    cout << s << endl;
+    switch (ch)
+	{
+		case 0:
+			ColorInversionC(pi, x, y, check);
+		    fprintf(fo, "%s\n%i %i\n%i\n", s, x, y, z);
+			fwrite(pi, sizeof(unsigned char), x * y * check, fo);
+			break;
+		case 1:
+			HorizontalReflectionC(pi, x, y, check);
+			fprintf(fo, "%s\n%i %i\n%i\n", s, x, y, z);
+			fwrite(pi, sizeof(unsigned char), x * y * check, fo);
+			break;
+		case 2:
+			VerticalReflectionC(pi, x, y, check);
+		    fprintf(fo, "%s\n%i %i\n%i\n", s, x, y, z);
+			fwrite(pi, sizeof(unsigned char), x * y * check, fo);
+			break;
+		case 3:
+			RigthTurnC(pi, x, y, cpypi, check);
+			fprintf(fo, "%s\n%i %i\n%i\n", s, y, x, z);
+			fwrite(cpypi, sizeof(unsigned char), x * y * check, fo);
+			break;
+		case 4:
+			LeftTurnC(pi, x, y, cpypi, check);
+			fprintf(fo, "%s\n%i %i\n%i\n", s, y, x, z);
+			fwrite(cpypi, sizeof(unsigned char), x * y * check, fo);
+			break;
+		default:
+			cout << "Wrong command";
+			break;
+	}
+
+Инверсия. Инверсия цветов изображения работает за один проход по массиву значений пикселей, изменяя значения яркости на противоположные. Не требует выделения дополнительной памяти. Для инверсии используется функция ColorInversionC.
+Зеркальное отражение по горизонтали. Зеркальное отражение по горизонтали работает за один проход по массиву значений пикселей. Не требуется дополнительная память для создания нового изображения. Для зеркального отражения по горизонтали используется функция HorizontalReflectionC.
+Зеркальное отражение по вертикали. Зеркальное отражение по вертикали работает за один проход по массиву значений пикселей. Не требуется дополнительная память для создания нового изображения.  Для преобразования используется функция VerticalReflectionC.
+Поворот на 90 градусов по часовой стрелке. Поворот на 90 градусов по часовой стрелке работает за один проход по массиву значений пикселей. Используется дополнительная память для создания нового изображения:
+unsigned char *cpypi = new unsigned char[x * y * check];
+Для преобразования и записи результата в файл используется функция RigthTurnC.
+Поворот на 90 градусов против часовой стрелки. Поворот на 90 градусов против часовой стрелки работает за один проход по массиву значений пикселей. Используется дополнительная память для создания нового изображения:
+unsigned char *cpypi = new unsigned char[x * y * check];
+Для преобразования и записи результата в файл используется функция LeftTurnC.
+Вывод
+В ходе проделанной работы были получены следующие результаты: инверсия, зеркальное отражение по горизонтали, зеркально отражение по вертикали работает без использования дополнительной памяти за один проход по массиву, а поворот на 90 градусов по/против часов стрелки использует дополнительную память равную памяти, необходимой на хранение исходного изображения. Каждая функция программы работает за O(n), где n – количество байт исходного изображения.
+Листинг кода
+Lab1.cpp
+#include <iostream>
+#include <cmath>
+#include <cstring>
+#include<stdio.h>
+
+using namespace std;
+
+
+void HorizontalReflectionC(unsigned char* pi, int x, int y, int check)
+{
+	int i;
+    for (i = 0; i < check * x * y; i ++)
+        if ((i % (check * x)) < x / 2 * check)
+           swap(pi[i], pi[check * x + i - 2 * (i % (check * x)) + 2 * (i % check) - check]);
+}
+
+void VerticalReflectionC(unsigned char* pi, int x, int y, int check)
+{
+	for (int i = 0; i < check * x * y; i ++)
+		if ((i / (x * check)) < (y / 2))
+	    	swap(pi[i], pi[check * x * y - x * check - check * x * (i / (x * check)) + (i % (check * x))]);
+}
+
+void RigthTurnC(unsigned char* pi, int x, int y, unsigned char* pix, int check)
+{
+	int k = 0;
+	for (int i = 1; i <= x; i++)    
+    	for (int j = y - 1; j >= 0; j--)	
+    	{
+    		for (int t = 0; t < check; t ++)
+    		{
+    			int otv = j * x * check + i * check - check + t;
+    			pix[k + t] = pi [otv];
+    		}
+			k = k + check;
+		}
+}
+
+void LeftTurnC(unsigned char* pi, int x, int y, unsigned char* pix, int check)
+{
+	int k = 0;
+	for (int i = x; i > 0; i--)    
+    	for (int j = 0; j < y; j++)	
+    	{
+    		for (int t = 0; t <= check - 1; t ++)
+    		{
+    			int otv = j * x * check + i * check - check + t;
+    			pix[k + t] = pi [otv];
+    		}
+			k = k + check;
+		}
+}
+
+void ColorInversionC(unsigned char* pi, int x, int y, int check)
+{
+	for (int i = 0; i < check * x * y; i ++)
+    	pi[i] = 255 - pi[i];
+}
+
+int main(int argc, char* argv[])
+{
+	char s[3];
+	s[2] = '\0';
+	int i, x, y, z, ch;
+    FILE *fi = fopen(argv[1], "rb");
+    if (fi == NULL)
+    {
+        cout << "INPUT ERROR\n";
+        return 1;
+	}
+    if (fscanf(fi, "%s", s) == 0)
+    {
+    	cout << "Critical damage name" << endl;
+    	fclose(fi);
+    	return 1;
+	}
+    int check = 0;
+    if (strcmp(s,"P5") == 0)
+    	check = 1;
+    if (strcmp(s,"P6") == 0)	
+		check = 3;
+	if (check == 0)
+	{
+		cout << "Wrong type of image";
+		fclose(fi);
+		return 1;
+	}
+	if (fscanf(fi, "%i", &x) == 0)
+	{
+    	cout << "Critical damage size of picture" << endl;
+    	fclose(fi);
+    	return 1;
+	}
+    if (fscanf(fi, "%i", &y) == 0)
+    {
+    	cout << "Critical damage size of picture" << endl;
+    	fclose(fi);
+    	return 1;
+	}
+    if (fscanf(fi, "%i\n", &z) == 0)
+    {
+    	cout << "Critical damage pixel dimension" << endl;
+    	fclose(fi);
+    	return 1;
+	}
+	if ((x < 0) || (y < 0) || (z < 0))
+	{
+		cout << "Just death";
+		fclose(fi);
+		return 1;
+	}
+//    cout << x << " " << y << " " << z << endl;
+	unsigned char *pi = new unsigned char [x * y * check];
+	unsigned char *cpypi = new unsigned char[x * y * check];
+	if (pi == nullptr)
+	{	
+		cout << "Out of memory";
+		fclose(fi);
+		return 1;
+	}
+    if (cpypi == nullptr)
+	{
+		cout << "Out of memory";
+		fclose(fi);
+		return 1;
+	}
+	if (fread(pi, sizeof(unsigned char), x * y * check, fi) < x * y * check)
+	{
+		cout << "Not enough bytes";
+		fclose(fi);
+		return 1;
+	}
+	if (argc != 4)
+	{
+		cout << "Error no command";
+		fclose(fi);
+		return 1;
+	}
+    ch = atoi(argv[3]);
+    fclose(fi);
+    if ((ch < 0)||(ch > 4))
+    {
+    	cout << "Wrong command" << endl;
+    	return 1;
+	}
+    FILE *fo = fopen(argv[2], "wb");
+    if (fo == NULL)
+    {
+        cout << "OUTPUT ERROR\n";
+        return 1;
+    }
+
+//    cout << s << endl;
+    switch (ch)
+	{
+		case 0:
+			ColorInversionC(pi, x, y, check);
+		    fprintf(fo, "%s\n%i %i\n%i\n", s, x, y, z);
+			fwrite(pi, sizeof(unsigned char), x * y * check, fo);
+			break;
+		case 1:
+			HorizontalReflectionC(pi, x, y, check);
+			fprintf(fo, "%s\n%i %i\n%i\n", s, x, y, z);
+			fwrite(pi, sizeof(unsigned char), x * y * check, fo);
+			break;
+		case 2:
+			VerticalReflectionC(pi, x, y, check);
+		    fprintf(fo, "%s\n%i %i\n%i\n", s, x, y, z);
+			fwrite(pi, sizeof(unsigned char), x * y * check, fo);
+			break;
+		case 3:
+			RigthTurnC(pi, x, y, cpypi, check);
+			fprintf(fo, "%s\n%i %i\n%i\n", s, y, x, z);
+			fwrite(cpypi, sizeof(unsigned char), x * y * check, fo);
+			break;
+		case 4:
+			LeftTurnC(pi, x, y, cpypi, check);
+			fprintf(fo, "%s\n%i %i\n%i\n", s, y, x, z);
+			fwrite(cpypi, sizeof(unsigned char), x * y * check, fo);
+			break;
+		default:
+			cout << "Wrong command";
+			break;
+	}
+//	cout << x << " " <<  y << " " << 3*x*y << " " << (y-1) * x * 3 + x * 3 - 3 + 2;
+	delete [] pi;
+	delete [] cpypi;
+    fclose(fo);
+    return 0;
+}
